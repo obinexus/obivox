@@ -1,0 +1,26 @@
+# Core audio processing
+sounddevice>=0.4.6
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Speech recognition
+openai-whisper>=20230918
+# vosk>=0.3.45  # Alternative ASR, uncomment if needed
+
+# Text-to-speech
+TTS>=0.20.0  # Coqui TTS
+# pyttsx3>=2.90  # Offline alternative, uncomment if needed
+
+# Audio format handling
+pydub>=0.25.1
+librosa>=0.10.0
+
+# Utilities
+python-dotenv>=1.0.0
+tqdm>=4.65.0
+colorama>=0.4.6
+
+# Development tools
+pytest>=7.4.0
+black>=23.7.0
+flake8>=6.1.0
