@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>OBIVox Codec System UML</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #2d3748;
+            text-align: center;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+        .diagram-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 10px;
+            border-left: 5px solid #667eea;
+        }
+        .code-section {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 10px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            margin: 20px 0;
+        }
+        .code-section pre {
+            margin: 0;
+        }
+        .keyword { color: #569cd6; }
+        .type { color: #4ec9b0; }
+        .string { color: #ce9178; }
+        .comment { color: #6a9955; }
+        .function { color: #dcdcaa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ OBIVox Codec Conversion System Architecture</h1>
+
+        <div class="diagram-section">
+            <h2>System Class Diagram</h2>
+            <div class="mermaid">
+classDiagram
+    class OBIVoxEngine {
+        -ffmpeg_handler: FFmpegProcessor
+        -nlm_framework: NLMFramework
+        -codec_registry: HashMap~String,CodecHandler~
+        -elf_linker: OBIELFLinker
+        +init() Result
+        +process_audio(input: AudioData) Result
+        +process_text(input: String) Result
+    }
+
+    class FFmpegProcessor {
+        -context: AVFormatContext
+        -codec: AVCodecContext
+        -resampler: SwrContext
+        +decode_audio(path: String) AudioBuffer
+        +encode_audio(buffer: AudioBuffer) ByteArray
+        +extract_features() AudioFeatures
+    }
+
+    class NLMFramework {
+        -bottom_up: BottomUpProcessor
+        -top_down: TopDownProcessor
+        -phonetic: PhoneticAnalyzer
+        +analyze(audio: AudioBuffer) NLMResult
+        +synthesize(features: NLMResult) AudioBuffer
+    }
+
+    class PhoneticAnalyzer {
+        -tone_detector: ToneDetector
+        -pitch_analyzer: PitchAnalyzer
+        -accent_classifier: AccentClassifier
+        +extract_prosody(audio: AudioBuffer) Prosody
+        +detect_features(audio: AudioBuffer) Features
+    }
+
+    class CodecHandler {
+        <<interface>>
+        +encode(input: ByteArray) Result
+        +decode(input: ByteArray) Result
+        +get_confidence() Float
+    }
+
+    class WhisperCodec {
+        -model: WhisperModel
+        -confidence_threshold: Float
+        +transcribe(audio: AudioBuffer) Text
+    }
+
+    class CoquiTTSCodec {
+        -model: TTSModel
+        -voice_profile: VoiceProfile
+        +synthesize(text: String) AudioBuffer
+    }
+
+    class OBIELFLinker {
+        -symbol_table: SymbolTable
+        -memory_map: MemoryMap
+        +load_codec(path: String) CodecModule
+        +resolve_symbols() Result
+    }
+
+    OBIVoxEngine --> FFmpegProcessor
+    OBIVoxEngine --> NLMFramework
+    OBIVoxEngine --> OBIELFLinker
+    NLMFramework --> PhoneticAnalyzer
+    CodecHandler <|-- WhisperCodec
+    CodecHandler <|-- CoquiTTSCodec
+    OBIVoxEngine --> CodecHandler
+            </div>
+        </div>
+
+        <div class="diagram-section">
+            <h2>Sequence Diagram - Bidirectional Processing</h2>
+            <div class="mermaid">
+sequenceDiagram
+    participant User
+    participant CLI
+    participant Engine as OBIVoxEngine
+    participant FFmpeg
+    participant NLM
+    participant Codec
+    participant ELF as ELFLinker
+
+    User->>CLI: obivox --input lecture.mp4
+    CLI->>Engine: process_audio(file_path)
+    Engine->>ELF: load_codec("whisper")
+    ELF-->>Engine: CodecModule
+    
+    Engine->>FFmpeg: decode_audio(lecture.mp4)
+    FFmpeg->>FFmpeg: extract_audio_stream()
+    FFmpeg->>FFmpeg: resample_to_16khz()
+    FFmpeg-->>Engine: AudioBuffer
+    
+    Engine->>NLM: analyze(AudioBuffer)
+    NLM->>NLM: bottom_up_processing()
+    NLM->>NLM: extract_phonetic_features()
+    NLM->>NLM: detect_tone_pitch_accent()
+    NLM-->>Engine: NLMResult
+    
+    Engine->>Codec: transcribe(AudioBuffer)
+    Codec->>Codec: run_inference()
+    Codec->>Codec: calculate_confidence()
+    Codec-->>Engine: TranscriptionResult
+    
+    alt Confidence > 0.85
+        Engine-->>CLI: success(transcription)
+    else Confidence < 0.85
+        Engine->>User: request_confirmation()
+        User-->>Engine: confirm/reject
+    end
+    
+    CLI-->>User: Output transcript.txt
+            </div>
+        </div>
+
+        <div class="diagram-section">
+            <h2>Component Architecture</h2>
+            <div class="mermaid">
+graph TB
+    subgraph "Input Layer"
+        IN1[Audio File<br/>MP4/WAV/M4A]
+        IN2[Text Input<br/>UTF-8]
+        IN3[Stream Input<br/>Real-time]
+    end
+
+    subgraph "FFmpeg Layer"
+        FF1[Decoder]
+        FF2[Resampler]
+        FF3[Feature Extractor]
+        FF4[Encoder]
+    end
+
+    subgraph "NLM Processing"
+        NL1[Bottom-Up<br/>Acoustic Analysis]
+        NL2[Top-Down<br/>Semantic Context]
+        NL3[Phonetic Features<br/>Tone/Pitch/Accent]
+    end
+
+    subgraph "Codec Layer"
+        CD1[Whisper ASR]
+        CD2[Coqui TTS]
+        CD3[VOSK ASR]
+        CD4[VITS TTS]
+    end
+
+    subgraph "ELF Linking"
+        EL1[Symbol Resolution]
+        EL2[Memory Mapping]
+        EL3[Dynamic Loading]
+    end
+
+    subgraph "Output Layer"
+        OUT1[Transcription]
+        OUT2[Audio Synthesis]
+        OUT3[Confidence Metrics]
+    end
+
+    IN1 --> FF1
+    IN2 --> NL2
+    IN3 --> FF2
+    
+    FF1 --> FF2 --> FF3 --> NL1
+    NL1 --> NL3
+    NL2 --> NL3
+    NL3 --> CD1
+    NL3 --> CD2
+    
+    CD1 --> EL1
+    CD2 --> EL1
+    EL1 --> EL2 --> EL3
+    
+    EL3 --> OUT1
+    EL3 --> OUT2
+    CD1 --> OUT3
+            </div>
+        </div>
+
+        <div class="code-section">
+            <h3>FFmpeg Pipeline Implementation (C/Rust FFI)</h3>
+            <pre><span class="comment">// ffmpeg_pipeline.c - Core FFmpeg processing pipeline</span>
+<span class="keyword">#include</span> <span class="string">&lt;libavformat/avformat.h&gt;</span>
+<span class="keyword">#include</span> <span class="string">&lt;libavcodec/avcodec.h&gt;</span>
+<span class="keyword">#include</span> <span class="string">&lt;libswresample/swresample.h&gt;</span>
+
+<span class="keyword">typedef struct</span> {
+    <span class="type">AVFormatContext</span> *format_ctx;
+    <span class="type">AVCodecContext</span> *codec_ctx;
+    <span class="type">SwrContext</span> *swr_ctx;
+    <span class="type">uint8_t</span> **audio_data;
+    <span class="type">int</span> linesize;
+    <span class="type">int</span> sample_rate;
+    <span class="type">enum</span> <span class="type">AVSampleFormat</span> sample_fmt;
+} <span class="type">OBIVoxAudioContext</span>;
+
+<span class="comment">// Initialize audio processing pipeline</span>
+<span class="type">int</span> <span class="function">obivox_init_pipeline</span>(<span class="type">OBIVoxAudioContext</span> **ctx, <span class="keyword">const</span> <span class="type">char</span> *input_path) {
+    *ctx = <span class="function">calloc</span>(<span class="keyword">1</span>, <span class="keyword">sizeof</span>(<span class="type">OBIVoxAudioContext</span>));
+    
+    <span class="comment">// Register all codecs and formats</span>
+    <span class="function">av_register_all</span>();
+    
+    <span class="comment">// Open input file</span>
+    <span class="keyword">if</span> (<span class="function">avformat_open_input</span>(&(*ctx)->format_ctx, input_path, <span class="keyword">NULL</span>, <span class="keyword">NULL</span>) < <span class="keyword">0</span>) {
+        <span class="keyword">return</span> -<span class="keyword">1</span>;
+    }
+    
+    <span class="comment">// Find audio stream</span>
+    <span class="type">int</span> audio_stream_idx = -<span class="keyword">1</span>;
+    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="keyword">0</span>; i < (*ctx)->format_ctx->nb_streams; i++) {
+        <span class="keyword">if</span> ((*ctx)->format_ctx->streams[i]->codecpar->codec_type == <span class="type">AVMEDIA_TYPE_AUDIO</span>) {
+            audio_stream_idx = i;
+            <span class="keyword">break</span>;
+        }
+    }
+    
+    <span class="comment">// Setup resampler for 16kHz mono output</span>
+    (*ctx)->swr_ctx = <span class="function">swr_alloc_set_opts</span>(<span class="keyword">NULL</span>,
+        <span class="type">AV_CH_LAYOUT_MONO</span>, <span class="type">AV_SAMPLE_FMT_FLT</span>, <span class="keyword">16000</span>,
+        (*ctx)->codec_ctx->channel_layout,
+        (*ctx)->codec_ctx->sample_fmt,
+        (*ctx)->codec_ctx->sample_rate,
+        <span class="keyword">0</span>, <span class="keyword">NULL</span>);
+    
+    <span class="function">swr_init</span>((*ctx)->swr_ctx);
+    <span class="keyword">return</span> <span class="keyword">0</span>;
+}
+
+<span class="comment">// Process audio with NLM features</span>
+<span class="type">int</span> <span class="function">obivox_process_with_nlm</span>(<span class="type">OBIVoxAudioContext</span> *ctx, 
+                             <span class="type">float</span> **output_buffer, 
+                             <span class="type">int</span> *num_samples) {
+    <span class="type">AVPacket</span> packet;
+    <span class="type">AVFrame</span> *frame = <span class="function">av_frame_alloc</span>();
+    
+    <span class="keyword">while</span> (<span class="function">av_read_frame</span>(ctx->format_ctx, &packet) >= <span class="keyword">0</span>) {
+        <span class="keyword">if</span> (<span class="function">avcodec_send_packet</span>(ctx->codec_ctx, &packet) == <span class="keyword">0</span>) {
+            <span class="keyword">while</span> (<span class="function">avcodec_receive_frame</span>(ctx->codec_ctx, frame) == <span class="keyword">0</span>) {
+                <span class="comment">// Resample to target format</span>
+                <span class="type">uint8_t</span> **resampled_data;
+                <span class="function">av_samples_alloc_array_and_samples</span>(&resampled_data, 
+                                                   &ctx->linesize,
+                                                   <span class="keyword">1</span>, frame->nb_samples,
+                                                   <span class="type">AV_SAMPLE_FMT_FLT</span>, <span class="keyword">0</span>);
+                
+                <span class="type">int</span> out_samples = <span class="function">swr_convert</span>(ctx->swr_ctx,
+                                              resampled_data, frame->nb_samples,
+                                              (<span class="keyword">const</span> <span class="type">uint8_t</span> **)frame->data, 
+                                              frame->nb_samples);
+                
+                <span class="comment">// Apply NLM processing here</span>
+                <span class="function">apply_phonetic_analysis</span>(resampled_data, out_samples);
+                
+                *output_buffer = (<span class="type">float</span> *)resampled_data[<span class="keyword">0</span>];
+                *num_samples = out_samples;
+            }
+        }
+        <span class="function">av_packet_unref</span>(&packet);
+    }
+    
+    <span class="function">av_frame_free</span>(&frame);
+    <span class="keyword">return</span> <span class="keyword">0</span>;
+}</pre>
+        </div>
+
+        <div class="code-section">
+            <h3>Rust Integration Layer</h3>
+            <pre><span class="comment">// obivox_core.rs - Main Rust implementation</span>
+<span class="keyword">use</span> std::sync::Arc;
+<span class="keyword">use</span> tokio::sync::RwLock;
+
+<span class="keyword">pub struct</span> <span class="type">OBIVoxSystem</span> {
+    engine: Arc&lt;RwLock&lt;<span class="type">OBIVoxEngine</span>&gt;&gt;,
+    plugins: Vec&lt;Box&lt;<span class="keyword">dyn</span> <span class="type">OBIVoxPlugin</span>&gt;&gt;,
+}
+
+<span class="keyword">impl</span> <span class="type">OBIVoxSystem</span> {
+    <span class="keyword">pub async fn</span> <span class="function">process_bidirectional</span>(&<span class="keyword">self</span>, input: <span class="type">Input</span>) -> Result&lt;<span class="type">Output</span>, <span class="type">OBIVoxError</span>&gt; {
+        <span class="keyword">match</span> input {
+            <span class="type">Input</span>::Audio(path) => {
+                <span class="comment">// STT Pipeline</span>
+                <span class="keyword">let</span> audio = <span class="keyword">self</span>.<span class="function">load_audio</span>(&path).<span class="keyword">await</span>?;
+                <span class="keyword">let</span> features = <span class="keyword">self</span>.<span class="function">extract_nlm_features</span>(&audio).<span class="keyword">await</span>?;
+                <span class="keyword">let</span> text = <span class="keyword">self</span>.<span class="function">speech_to_text</span>(&audio, &features).<span class="keyword">await</span>?;
+                
+                <span class="comment">// Confidence validation</span>
+                <span class="keyword">if</span> text.confidence < <span class="keyword">0.85</span> {
+                    <span class="keyword">return</span> <span class="type">Err</span>(<span class="type">OBIVoxError</span>::LowConfidence(text.confidence));
+                }
+                
+                <span class="type">Ok</span>(<span class="type">Output</span>::Text(text))
+            }
+            <span class="type">Input</span>::Text(content) => {
+                <span class="comment">// TTS Pipeline</span>
+                <span class="keyword">let</span> prosody = <span class="keyword">self</span>.<span class="function">analyze_text_prosody</span>(&content).<span class="keyword">await</span>?;
+                <span class="keyword">let</span> audio = <span class="keyword">self</span>.<span class="function">text_to_speech</span>(&content, &prosody).<span class="keyword">await</span>?;
+                
+                <span class="type">Ok</span>(<span class="type">Output</span>::Audio(audio))
+            }
+        }
+    }
+    
+    <span class="keyword">async fn</span> <span class="function">extract_nlm_features</span>(&<span class="keyword">self</span>, audio: &<span class="type">AudioBuffer</span>) -> Result&lt;<span class="type">NLMFeatures</span>, <span class="type">OBIVoxError</span>&gt; {
+        <span class="keyword">let</span> engine = <span class="keyword">self</span>.engine.read().<span class="keyword">await</span>;
+        
+        <span class="comment">// Bottom-up processing: acoustic features</span>
+        <span class="keyword">let</span> acoustic = engine.nlm_framework.bottom_up.<span class="function">process</span>(audio).<span class="keyword">await</span>?;
+        
+        <span class="comment">// Phonetic analysis: tone, pitch, accent</span>
+        <span class="keyword">let</span> phonetic = engine.nlm_framework.phonetic.<span class="function">analyze</span>(audio).<span class="keyword">await</span>?;
+        
+        <span class="type">Ok</span>(<span class="type">NLMFeatures</span> {
+            acoustic_features: acoustic,
+            phonetic_features: phonetic,
+            confidence: <span class="keyword">self</span>.<span class="function">calculate_confidence</span>(&acoustic, &phonetic),
+        })
+    }
+}</pre>
+        </div>
+
+        <div class="diagram-section">
+            <h2>Plugin System Architecture</h2>
+            <div class="mermaid">
+graph LR
+    subgraph "OBIVox Core"
+        CORE[Core Engine]
+        API[Plugin API]
+        LOADER[Plugin Loader]
+    end
+
+    subgraph "Platform SDKs"
+        LINUX[Linux .so]
+        MAC[macOS .dylib]
+        WIN[Windows .dll]
+    end
+
+    subgraph "Codec Plugins"
+        WHISPER[Whisper Plugin]
+        COQUI[Coqui Plugin]
+        CUSTOM[Custom Codecs]
+    end
+
+    CORE --> API
+    API --> LOADER
+    LOADER --> LINUX
+    LOADER --> MAC
+    LOADER --> WIN
+    
+    WHISPER --> API
+    COQUI --> API
+    CUSTOM --> API
+
+    style CORE fill:#667eea,color:#fff
+    style API fill:#764ba2,color:#fff
+    style LOADER fill:#f093fb,color:#fff
+            </div>
+        </div>
+
+        <div class="code-section">
+            <h3>CLI Flag Implementation</h3>
+            <pre><span class="comment">#!/bin/bash</span>
+<span class="comment"># obivox CLI with --obiai flag integration</span>
+
+obivox <span class="string">--obiai</span> <span class="string">--input</span> lecture.mp4 <span class="string">--output</span> transcript.txt \
+       <span class="string">--nlm-mode</span> bottom-up \
+       <span class="string">--phonetic-features</span> tone,pitch,accent \
+       <span class="string">--confidence-threshold</span> 0.85 \
+       <span class="string">--parallel-workers</span> 4
+
+<span class="comment"># Platform-specific installation</span>
+<span class="keyword">case</span> <span class="string">"$(uname -s)"</span> <span class="keyword">in</span>
+    Linux*)
+        sudo apt install obivox
+        obivox-plugin install <span class="string">--platform</span> linux <span class="string">--codec</span> whisper
+        ;;
+    Darwin*)
+        brew install obivox
+        obivox-plugin install <span class="string">--platform</span> macos <span class="string">--codec</span> coqui
+        ;;
+    MINGW*|CYGWIN*)
+        winget install obivox
+        obivox-plugin.exe install <span class="string">--platform</span> windows <span class="string">--codec</span> all
+        ;;
+<span class="keyword">esac</span></pre>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            themeVariables: {
+                primaryColor: '#667eea',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#7c3aed',
+                lineColor: '#5b21b6',
+                secondaryColor: '#764ba2',
+                tertiaryColor: '#f093fb'
+            }
+        });
+    </script>
+</body>
+</html>

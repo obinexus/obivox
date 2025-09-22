@@ -1,170 +1,359 @@
-# OBIVox
+# OBIVox System Architecture & Development Plan
 
-**Bidirectional Knowledge Interface for Real-Time Learning**
-Transform lectures, podcasts, and conversations into interactive knowledge sessions. OBIVox bridges the gap between spoken content and instant comprehension through intelligent audio processing.
+## System Overview
+OBIVox is a bidirectional knowledge interface implementing real-time STT (Speech-to-Text) and TTS (Text-to-Speech) with phonetic structure optimization.
 
-## 🎯 What is OBIVox?
+## Core Architecture Components
 
-OBIVox is a thread-safe, bidirectional pipeline that converts between audio and text in real-time. Built for learners, researchers, and knowledge workers who need to:
+### 1. Codec Conversion Pipeline Architecture
 
-- **Capture** spoken lectures and convert them to searchable text
-- **Query** content through natural language
-- **Generate** audio explanations from written material
-- **Navigate** complex topics with instant audio/text switching
+```mermaid
+graph TB
+    subgraph Input Layer
+        A1[Audio Input WAV/MP4/M4A]
+        A2[FFmpeg Decoder]
+        A3[Audio Normalization]
+    end
 
-## 🚀 Key Features
+    subgraph NLM Framework
+        B1[Bottom-Up Processing]
+        B2[Top-Down Processing]
+        B3[Phonetic Analyzer]
+        B4[Accent/Tone Detector]
+    end
 
-### Thread-Safe Architecture
-- Parent-child task trees for complex workflows
-- Non-blocking concurrent processing
-- Safety checks with confidence thresholds
-- Graceful error handling and fallbacks
+    subgraph Core Processing
+        C1[ASR Engine<br/>Whisper/VOSK]
+        C2[TTS Engine<br/>Coqui/VITS]
+        C3[Confidence Validator]
+        C4[Thread Pool Orchestrator]
+    end
 
-### Multi-Format Support
-- WAV and MP4 audio input
-- Automatic format conversion via FFmpeg
-- Configurable sample rates and channels
-- Extensible to other media formats
+    subgraph ELF Linking Layer
+        D1[OBIELF Loader]
+        D2[Symbol Resolution]
+        D3[Dynamic Binding]
+        D4[Memory Mapping]
+    end
 
-### Intelligent Processing
-- Confidence-based verification
-- User confirmation for low-confidence results
-- Modular ASR/TTS backend support
-- Ready for Whisper, VOSK, Coqui TTS integration
+    subgraph Output Layer
+        E1[Audio Synthesis]
+        E2[Text Generation]
+        E3[Format Encoder]
+    end
 
-## 📚 Use Cases
+    A1 --> A2 --> A3 --> B1
+    B1 --> B3 --> B4 --> C1
+    B2 --> C2
+    C1 --> C3 --> E2
+    C2 --> C3 --> E1
+    C4 --> D1 --> D2 --> D3 --> D4
+```
 
-**Lecture Capture**: Record entire lectures and get instant transcripts with timestamp mapping.
+## Implementation Specification
 
-**Study Sessions**: Convert textbooks to audio for passive learning while commuting.
+### Phase 1: Core Rust/C Implementation
 
-**Research Notes**: Dictate research observations and get formatted, searchable text.
+```rust
+// obivox_core.rs - Main system structure
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 
-**Knowledge Synthesis**: Feed in multiple sources and generate cohesive audio summaries.
+pub struct OBIVoxEngine {
+    // Core components
+    ffmpeg_handler: Arc<FFmpegProcessor>,
+    nlm_framework: NLMFramework,
+    codec_registry: HashMap<String, Box<dyn CodecHandler>>,
+    elf_linker: OBIELFLinker,
+}
 
-## 🛠️ Installation
+pub struct NLMFramework {
+    bottom_up: BottomUpProcessor,
+    top_down: TopDownProcessor,
+    phonetic_analyzer: PhoneticAnalyzer,
+}
+
+pub struct PhoneticAnalyzer {
+    tone_detector: ToneDetector,
+    pitch_analyzer: PitchAnalyzer,
+    accent_classifier: AccentClassifier,
+    // High-level features, not voice-dependent
+    prosody_extractor: ProsodyExtractor,
+}
+
+pub trait CodecHandler: Send + Sync {
+    fn encode(&self, input: &[u8]) -> Result<Vec<u8>, CodecError>;
+    fn decode(&self, input: &[u8]) -> Result<Vec<u8>, CodecError>;
+    fn get_confidence(&self) -> f32;
+}
+```
+
+### Phase 2: FFmpeg Integration Layer
+
+```c
+// ffmpeg_bridge.c - FFmpeg C bindings
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libswresample/swresample.h>
+
+typedef struct {
+    AVFormatContext *fmt_ctx;
+    AVCodecContext *codec_ctx;
+    SwrContext *swr_ctx;
+    int sample_rate;
+    int channels;
+} OBIVoxFFmpegContext;
+
+// Initialize FFmpeg pipeline
+int obivox_ffmpeg_init(OBIVoxFFmpegContext **ctx, const char *input_path) {
+    *ctx = malloc(sizeof(OBIVoxFFmpegContext));
+    
+    // Open input file
+    if (avformat_open_input(&(*ctx)->fmt_ctx, input_path, NULL, NULL) < 0) {
+        return OBIVOX_ERR_OPEN_FAILED;
+    }
+    
+    // Find stream info
+    if (avformat_find_stream_info((*ctx)->fmt_ctx, NULL) < 0) {
+        return OBIVOX_ERR_NO_STREAM;
+    }
+    
+    // Setup resampler for 16kHz mono
+    (*ctx)->swr_ctx = swr_alloc_set_opts(NULL,
+        AV_CH_LAYOUT_MONO, AV_SAMPLE_FMT_S16, 16000,
+        (*ctx)->codec_ctx->channel_layout,
+        (*ctx)->codec_ctx->sample_fmt,
+        (*ctx)->codec_ctx->sample_rate, 0, NULL);
+    
+    return OBIVOX_SUCCESS;
+}
+```
+
+### Phase 3: System SDK & Plugin Architecture
+
+```rust
+// plugin_system.rs - Plugin SDK interface
+pub trait OBIVoxPlugin {
+    fn init(&mut self) -> Result<(), PluginError>;
+    fn process(&mut self, input: AudioBuffer) -> Result<AudioBuffer, PluginError>;
+    fn get_metadata(&self) -> PluginMetadata;
+}
+
+// Platform-specific builders
+pub struct PlatformBuilder {
+    target_os: TargetOS,
+}
+
+impl PlatformBuilder {
+    pub fn build_unix(&self) -> Result<Package, BuildError> {
+        // Generate .deb/.rpm packages
+        self.generate_systemd_service()?;
+        self.compile_shared_libraries()?;
+        Ok(Package::Unix(UnixPackage::new()))
+    }
+    
+    pub fn build_macos(&self) -> Result<Package, BuildError> {
+        // Generate .dmg with code signing
+        self.generate_launchd_plist()?;
+        self.compile_frameworks()?;
+        Ok(Package::MacOS(DMGPackage::new()))
+    }
+    
+    pub fn build_windows(&self) -> Result<Package, BuildError> {
+        // Generate .msi installer
+        self.generate_service_manifest()?;
+        self.compile_dlls()?;
+        Ok(Package::Windows(MSIPackage::new()))
+    }
+}
+```
+
+### Phase 4: ELF Linking Layer for Seamless Integration
+
+```c
+// obielf_linker.c - Custom ELF linking for codec modules
+#include <elf.h>
+#include <dlfcn.h>
+
+typedef struct {
+    Elf64_Ehdr header;
+    void* codec_symbols;
+    void* memory_map;
+} OBIELFContext;
+
+// Dynamic codec loading with OBIELF format
+int obielf_load_codec(const char* codec_path, OBIELFContext** ctx) {
+    *ctx = malloc(sizeof(OBIELFContext));
+    
+    // Load ELF with custom sections
+    void* handle = dlopen(codec_path, RTLD_LAZY | RTLD_LOCAL);
+    
+    // Resolve codec symbols
+    (*ctx)->codec_symbols = dlsym(handle, "obivox_codec_table");
+    
+    // Map shared memory for zero-copy audio passing
+    (*ctx)->memory_map = mmap(NULL, AUDIO_BUFFER_SIZE, 
+                              PROT_READ | PROT_WRITE,
+                              MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    
+    return 0;
+}
+```
+
+## Platform-Specific SDK Integration
+
+### Linux Package (.deb/.rpm)
+```bash
+# debian/control
+Package: obivox
+Version: 1.0.0
+Architecture: amd64
+Depends: libffmpeg4, libasound2
+Description: Bidirectional audio-text processing system
+```
+
+### macOS Framework (.dmg)
+```xml
+<!-- Info.plist -->
+<key>CFBundleIdentifier</key>
+<string>org.obinexus.obivox</string>
+<key>LSBackgroundOnly</key>
+<true/>
+```
+
+### Windows Service (.msi)
+```xml
+<!-- obivox.wxs -->
+<Component Id="OBIVoxService">
+    <ServiceInstall Name="OBIVox" 
+                    Start="auto" 
+                    Type="ownProcess"/>
+</Component>
+```
+
+## Build System Configuration
+
+```cmake
+# CMakeLists.txt
+cmake_minimum_required(VERSION 3.16)
+project(OBIVox LANGUAGES C CXX)
+
+# Find dependencies
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FFMPEG REQUIRED 
+    libavformat libavcodec libswresample)
+
+# Core library
+add_library(obivox_core SHARED
+    src/core/engine.c
+    src/codecs/whisper_wrapper.c
+    src/codecs/coqui_wrapper.c
+    src/nlm/phonetic_analyzer.c
+    src/elf/obielf_linker.c
+)
+
+# Platform-specific targets
+if(UNIX AND NOT APPLE)
+    add_custom_target(package_deb
+        COMMAND ${CMAKE_COMMAND} -E cmake_echo_color 
+                --cyan "Building .deb package"
+        COMMAND dpkg-buildpackage -b -uc
+    )
+elseif(APPLE)
+    add_custom_target(package_dmg
+        COMMAND ${CMAKE_COMMAND} -E cmake_echo_color 
+                --cyan "Building .dmg package"
+        COMMAND hdiutil create -volname OBIVox 
+                -srcfolder ${CMAKE_BINARY_DIR}/OBIVox.app 
+                -ov OBIVox.dmg
+    )
+elseif(WIN32)
+    add_custom_target(package_msi
+        COMMAND ${CMAKE_COMMAND} -E cmake_echo_color 
+                --cyan "Building .msi installer"
+        COMMAND candle.exe obivox.wxs
+        COMMAND light.exe -out OBIVox.msi obivox.wixobj
+    )
+endif()
+```
+
+## Command-Line Interface
 
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/obivox.git
-cd obivox
+# OBIVox CLI Usage
+obivox --input lecture.mp4 --mode stt --output transcript.txt
+obivox --input book.txt --mode tts --voice en_US --output audiobook.m4a
+obivox --pipeline config.yaml --batch lectures/*.mp4
 
-# Create virtual environment (Python 3.10 recommended)
-conda create -n obivox python=3.10
-conda activate obivox
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Install system dependencies
-sudo apt-get install ffmpeg portaudio19-dev  # Ubuntu/Debian
-# brew install ffmpeg portaudio              # macOS
+# Plugin management
+obivox-plugin install whisper-large
+obivox-plugin list
+obivox-plugin configure coqui-tts --voice jenny
 ```
 
-## 💡 Quick Start
+## Development Roadmap
 
-```python
-# Basic usage
-python main.py lecture_recording.mp4
+### Milestone 1: Core Implementation (Weeks 1-4)
+- [ ] FFmpeg integration layer in C
+- [ ] Basic STT/TTS pipeline in Rust
+- [ ] Thread-safe task orchestration
+- [ ] Confidence validation system
 
-# The system will:
-# 1. Extract audio from MP4
-# 2. Transcribe speech to text
-# 3. Verify transcription quality
-# 4. Generate audio feedback
+### Milestone 2: NLM Framework (Weeks 5-8)
+- [ ] Bottom-up phonetic processing
+- [ ] Top-down semantic analysis
+- [ ] Tone/pitch/accent detection
+- [ ] Prosody extraction
+
+### Milestone 3: Platform SDKs (Weeks 9-12)
+- [ ] Linux package generation (.deb/.rpm)
+- [ ] macOS framework and .dmg
+- [ ] Windows service and .msi
+- [ ] Plugin system architecture
+
+### Milestone 4: OBIELF Integration (Weeks 13-16)
+- [ ] Custom ELF sections for codecs
+- [ ] Dynamic symbol resolution
+- [ ] Memory-mapped audio buffers
+- [ ] Zero-copy audio pipeline
+
+## Testing Strategy
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_bidirectional_conversion() {
+        let input = "Hello, OBIVox";
+        let audio = text_to_speech(input).unwrap();
+        let output = speech_to_text(audio).unwrap();
+        assert_eq!(input.to_lowercase(), output.to_lowercase());
+    }
+    
+    #[test]
+    fn test_confidence_threshold() {
+        let low_quality_audio = generate_noisy_audio();
+        let result = process_with_confidence(low_quality_audio);
+        assert!(result.confidence < 0.6);
+        assert!(result.requires_confirmation);
+    }
+}
 ```
 
-## 🏗️ Architecture
+## Integration with OBINexus Ecosystem
 
-```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  Audio In   │────▶│  STT Worker  │────▶│   Text Out  │
-│ (WAV/MP4)   │     │  (Whisper)   │     │  (Indexed)  │
-└─────────────┘     └──────────────┘     └─────────────┘
-                            │
-                    ┌───────▼────────┐
-                    │  Orchestrator  │
-                    │  (Thread Pool) │
-                    └───────┬────────┘
-                            │
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  Text In    │────▶│  TTS Worker  │────▶│  Audio Out  │
-│ (Query/Doc) │     │ (Coqui/VITS) │     │   (WAV)     │
-└─────────────┘     └──────────────┘     └─────────────┘
-```
+The OBIVox system integrates seamlessly with:
+- **OBIELF**: Custom ELF format for codec modules
+- **ObiCall**: Zero-trust module invocation
+- **Self-Healing Architecture**: Fault-tolerant audio processing
+- **Rift/GOSI toolchain**: Compilation and linking
 
-## 🔧 Configuration
+## Performance Targets
 
-Edit `config.py` to customize:
-
-```python
-# Worker threads
-MAX_WORKERS = 4
-
-# Confidence thresholds
-ASR_CONFIDENCE_THRESHOLD = 0.60
-
-# Output directories
-WORKDIR = "work"
-TTS_OUTPUT_DIR = "work/tts_out"
-
-# Model selection
-ASR_MODEL = "whisper"  # or "vosk", "wav2vec2"
-TTS_MODEL = "coqui"    # or "vits", "tacotron2"
-```
-
-## 🧪 Advanced Usage
-
-### Custom Task Trees
-
-```python
-# Create complex workflows
-root = TaskNode(id="lecture_process", kind="composite")
-root.add_child(TaskNode(id="transcribe", kind="stt", payload=audio_path))
-root.add_child(TaskNode(id="summarize", kind="llm", payload=transcription))
-root.add_child(TaskNode(id="vocalize", kind="tts", payload=summary))
-```
-
-### Batch Processing
-
-```python
-# Process entire lecture series
-for lecture in Path("lectures/").glob("*.mp4"):
-    process_lecture(lecture, output_dir="transcripts/")
-```
-
-## 🎓 Learning Enhancement Features (Roadmap)
-
-- [ ] Real-time keyword highlighting
-- [ ] Automatic chapter detection
-- [ ] Multi-speaker diarization
-- [ ] Knowledge graph generation
-- [ ] Flashcard creation from transcripts
-- [ ] Speed-adjustable playback
-- [ ] Language translation pipeline
-
-## 🤝 Contributing
-
-We welcome contributions! Areas of interest:
-
-- Additional ASR/TTS model integrations
-- Performance optimizations
-- UI/UX improvements
-- Educational feature plugins
-- Documentation and tutorials
-
-## 📄 License
-
-MIT License - See LICENSE file for details
-
-## 🌟 Acknowledgments
-
-Built on the shoulders of giants:
-- OpenAI Whisper for robust ASR
-- Coqui TTS for natural speech synthesis
-- FFmpeg for media handling
-- The open-source ML community
-
----
-
-**"All the knowledge of any topic at your fingertips"** - Transform how you learn, one conversation at a time.
+- STT Latency: < 500ms for 10-second audio
+- TTS Latency: < 200ms for 100-word text
+- Memory Usage: < 512MB resident
+- Thread Pool: 4-8 concurrent workers
+- Confidence Threshold: > 0.85 for production
