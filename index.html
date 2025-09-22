@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OBIVox Codec System UML - Working Version</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #2d3748;
+            text-align: center;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+        h2 {
+            color: #4a5568;
+            margin-top: 30px;
+        }
+        .diagram-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 10px;
+            border-left: 5px solid #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ OBIVox Codec Conversion System Architecture</h1>
+
+        <div class="diagram-section">
+            <h2>System Class Diagram</h2>
+            <pre class="mermaid">
+classDiagram
+    class OBIVoxEngine {
+        +init()
+        +process_audio()
+        +process_text()
+    }
+    class FFmpegProcessor {
+        +decode_audio()
+        +encode_audio()
+        +extract_features()
+    }
+    class NLMFramework {
+        +analyze()
+        +synthesize()
+    }
+    class PhoneticAnalyzer {
+        +extract_prosody()
+        +detect_features()
+    }
+    class CodecHandler {
+        &lt;&lt;interface&gt;&gt;
+        +encode()
+        +decode()
+        +get_confidence()
+    }
+    class WhisperCodec {
+        +transcribe()
+    }
+    class CoquiTTSCodec {
+        +synthesize()
+    }
+    class OBIELFLinker {
+        +load_codec()
+        +resolve_symbols()
+    }
+    OBIVoxEngine --&gt; FFmpegProcessor
+    OBIVoxEngine --&gt; NLMFramework
+    OBIVoxEngine --&gt; OBIELFLinker
+    NLMFramework --&gt; PhoneticAnalyzer
+    CodecHandler &lt;|-- WhisperCodec
+    CodecHandler &lt;|-- CoquiTTSCodec
+    OBIVoxEngine --&gt; CodecHandler
+            </pre>
+        </div>
+
+        <div class="diagram-section">
+            <h2>Sequence Diagram - Bidirectional Processing</h2>
+            <pre class="mermaid">
+sequenceDiagram
+    participant User
+    participant CLI
+    participant Engine as OBIVoxEngine
+    participant FFmpeg
+    participant NLM
+    participant Codec
+    participant ELF as ELFLinker
+
+    User-&gt;&gt;CLI: obivox --input lecture.mp4
+    CLI-&gt;&gt;Engine: process_audio(file_path)
+    Engine-&gt;&gt;ELF: load_codec("whisper")
+    ELF--&gt;&gt;Engine: CodecModule
+    
+    Engine-&gt;&gt;FFmpeg: decode_audio(lecture.mp4)
+    FFmpeg-&gt;&gt;FFmpeg: extract_audio_stream()
+    FFmpeg-&gt;&gt;FFmpeg: resample_to_16khz()
+    FFmpeg--&gt;&gt;Engine: AudioBuffer
+    
+    Engine-&gt;&gt;NLM: analyze(AudioBuffer)
+    NLM-&gt;&gt;NLM: bottom_up_processing()
+    NLM-&gt;&gt;NLM: extract_phonetic_features()
+    NLM-&gt;&gt;NLM: detect_tone_pitch_accent()
+    NLM--&gt;&gt;Engine: NLMResult
+    
+    Engine-&gt;&gt;Codec: transcribe(AudioBuffer)
+    Codec-&gt;&gt;Codec: run_inference()
+    Codec-&gt;&gt;Codec: calculate_confidence()
+    Codec--&gt;&gt;Engine: TranscriptionResult
+    
+    alt Confidence &gt; 0.85
+        Engine--&gt;&gt;CLI: success(transcription)
+    else Confidence &lt; 0.85
+        Engine-&gt;&gt;User: request_confirmation()
+        User--&gt;&gt;Engine: confirm/reject
+    end
+    
+    CLI--&gt;&gt;User: Output transcript.txt
+            </pre>
+        </div>
+
+        <div class="diagram-section">
+            <h2>Component Architecture</h2>
+            <pre class="mermaid">
+graph TB
+    subgraph "Input Layer"
+        IN1[Audio File&lt;br/&gt;MP4/WAV/M4A]
+        IN2[Text Input&lt;br/&gt;UTF-8]
+        IN3[Stream Input&lt;br/&gt;Real-time]
+    end
+
+    subgraph "FFmpeg Layer"
+        FF1[Decoder]
+        FF2[Resampler]
+        FF3[Feature Extractor]
+        FF4[Encoder]
+    end
+
+    subgraph "NLM Processing"
+        NL1[Bottom-Up&lt;br/&gt;Acoustic Analysis]
+        NL2[Top-Down&lt;br/&gt;Semantic Context]
+        NL3[Phonetic Features&lt;br/&gt;Tone/Pitch/Accent]
+    end
+
+    subgraph "Codec Layer"
+        CD1[Whisper ASR]
+        CD2[Coqui TTS]
+        CD3[VOSK ASR]
+        CD4[VITS TTS]
+    end
+
+    subgraph "ELF Linking"
+        EL1[Symbol Resolution]
+        EL2[Memory Mapping]
+        EL3[Dynamic Loading]
+    end
+
+    subgraph "Output Layer"
+        OUT1[Transcription]
+        OUT2[Audio Synthesis]
+        OUT3[Confidence Metrics]
+    end
+
+    IN1 --&gt; FF1
+    IN2 --&gt; NL2
+    IN3 --&gt; FF2
+    
+    FF1 --&gt; FF2 --&gt; FF3 --&gt; NL1
+    NL1 --&gt; NL3
+    NL2 --&gt; NL3
+    NL3 --&gt; CD1
+    NL3 --&gt; CD2
+    
+    CD1 --&gt; EL1
+    CD2 --&gt; EL1
+    EL1 --&gt; EL2 --&gt; EL3
+    
+    EL3 --&gt; OUT1
+    EL3 --&gt; OUT2
+    CD1 --&gt; OUT3
+            </pre>
+        </div>
+
+        <div class="diagram-section">
+            <h2>Plugin System Architecture</h2>
+            <pre class="mermaid">
+graph LR
+    subgraph "OBIVox Core"
+        CORE[Core Engine]
+        API[Plugin API]
+        LOADER[Plugin Loader]
+    end
+
+    subgraph "Platform SDKs"
+        LINUX[Linux .so]
+        MAC[macOS .dylib]
+        WIN[Windows .dll]
+    end
+
+    subgraph "Codec Plugins"
+        WHISPER[Whisper Plugin]
+        COQUI[Coqui Plugin]
+        CUSTOM[Custom Codecs]
+    end
+
+    CORE --&gt; API
+    API --&gt; LOADER
+    LOADER --&gt; LINUX
+    LOADER --&gt; MAC
+    LOADER --&gt; WIN
+    
+    WHISPER --&gt; API
+    COQUI --&gt; API
+    CUSTOM --&gt; API
+
+    style CORE fill:#667eea,color:#fff
+    style API fill:#764ba2,color:#fff
+    style LOADER fill:#f093fb,color:#fff
+            </pre>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default'
+        });
+    </script>
+</body>
+</html>
